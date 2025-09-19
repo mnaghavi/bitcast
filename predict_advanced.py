@@ -160,6 +160,8 @@ Examples:
   python predict_advanced.py --period "1,3,6-12 months"
   python predict_advanced.py --all-horizons
   python predict_advanced.py --retrain --period month
+  python predict_advanced.py --evaluate
+  python predict_advanced.py --evaluate --test-days 60 --eval-horizons "1,3,7,14,30"
         '''
     )
 
@@ -175,11 +177,50 @@ Examples:
                        default='ensemble', help='Model to use for prediction')
     parser.add_argument('--list-periods', action='store_true',
                        help='List available prediction periods')
+    parser.add_argument('--evaluate', action='store_true',
+                       help='Evaluate model accuracy on historical data')
+    parser.add_argument('--test-days', type=int, default=30,
+                       help='Number of recent days to use for evaluation (default: 30)')
+    parser.add_argument('--eval-horizons', type=str, default='1,7,30',
+                       help='Prediction horizons to evaluate (comma-separated days, default: 1,7,30)')
 
     args = parser.parse_args()
 
     if args.list_periods:
         print_prediction_options()
+        return
+
+    if args.evaluate:
+        print("🚀 BitCast - Model Accuracy Evaluation")
+        print("=" * 55)
+
+        try:
+            predictor = AdvancedBitcoinPredictor()
+
+            # Parse evaluation horizons
+            try:
+                horizons = [int(h.strip()) for h in args.eval_horizons.split(',')]
+            except ValueError:
+                print("❌ Error: Invalid horizon format. Use comma-separated integers (e.g., '1,7,30')")
+                sys.exit(1)
+
+            print(f"📊 Evaluating on {args.test_days} recent days with horizons: {horizons}")
+
+            # Run evaluation
+            results = predictor.evaluate_models_historical(
+                test_days=args.test_days,
+                horizons=horizons
+            )
+
+            if results:
+                predictor.generate_accuracy_report(results)
+            else:
+                print("❌ Evaluation failed. Make sure models are trained and data is available.")
+
+        except Exception as e:
+            print(f"❌ Evaluation error: {e}")
+            print("💡 Try: python predict_advanced.py --update-data --retrain first")
+
         return
 
     print("🚀 BitCast - Bitcoin Forecast Experiments")

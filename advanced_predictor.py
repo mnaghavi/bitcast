@@ -9,7 +9,7 @@ import numpy as np
 import yfinance as yf
 from datetime import datetime, timedelta
 from sklearn.preprocessing import RobustScaler
-from sklearn.metrics import mean_absolute_error
+from sklearn.metrics import mean_absolute_error, mean_absolute_percentage_error
 import tensorflow as tf
 from tensorflow.keras.models import Sequential, Model, load_model
 from tensorflow.keras.layers import (LSTM, GRU, Dense, Dropout, Input,
@@ -536,6 +536,302 @@ class AdvancedBitcoinPredictor:
             predictions[days] = predicted_price
 
         return predictions
+
+    def evaluate_models_historical(self, test_days=30, horizons=[1, 7, 30]):
+        """
+        Evaluate model accuracy using historical data backtesting.
+
+        Args:
+            test_days (int): Number of recent days to use for testing
+            horizons (list): Prediction horizons to test (days ahead)
+
+        Returns:
+            dict: Accuracy metrics for each model and horizon
+        """
+        print(f"🔍 Evaluating models on {test_days} historical test days...")
+
+        # Load data
+        if os.path.exists('data/bitcoin_data.csv'):
+            data = pd.read_csv('data/bitcoin_data.csv', index_col=0, parse_dates=True)
+        else:
+            print("No data found. Please run with --update-data first.")
+            return {}
+
+        if len(data) < self.lookback_days + max(horizons) + test_days:
+            print("Not enough data for evaluation. Need more historical data.")
+            return {}
+
+        # Prepare feature columns
+        feature_columns = [col for col in data.columns if col in [
+            'Close', 'Volume', 'Returns', 'Log_Returns', 'Price_Range', 'Body_Size',
+            'MA_7', 'MA_14', 'MA_21', 'MA_50', 'MA_100', 'MA_200',
+            'MA_7_ratio', 'MA_21_ratio', 'MA_50_ratio', 'MA_200_ratio',
+            'EMA_12', 'EMA_26', 'EMA_50',
+            'MACD', 'MACD_signal', 'MACD_histogram',
+            'RSI_14', 'RSI_30',
+            'BB_width_20', 'BB_position_20', 'BB_width_50', 'BB_position_50',
+            'Volume_ratio', 'Volume_price_trend',
+            'Momentum_5', 'Momentum_10', 'Momentum_20',
+            'Volatility_10', 'Volatility_30',
+            'Support_distance', 'Resistance_distance',
+            'DayOfWeek', 'Month', 'Quarter',
+            'SPY_Returns', 'BTC_SPY_correlation',
+            'Gold_Returns', 'BTC_Gold_correlation'
+        ]]
+
+        # Load models if not already loaded
+        if not self.models:
+            try:
+                self.load_models()
+            except:
+                print("Models not found. Please train models first.")
+                return {}
+
+        results = {
+            'ensemble': {},
+            'lstm': {},
+            'gru': {},
+            'transformer': {}
+        }
+
+        model_names = ['ensemble', 'lstm', 'gru', 'transformer']
+
+        for horizon in horizons:
+            print(f"  Testing {horizon}-day predictions...")
+
+            for model_name in model_names:
+                predictions = []
+                actuals = []
+
+                # Test on recent days
+                for test_day in range(test_days):
+                    # Use data up to test_day from the end
+                    end_idx = len(data) - test_day - horizon
+                    if end_idx < self.lookback_days:
+                        continue
+
+                    # Get historical features for prediction
+                    hist_data = data.iloc[:end_idx]
+                    recent_features = hist_data[feature_columns].tail(self.lookback_days).values
+
+                    try:
+                        scaled_recent = self.scaler.transform(recent_features)
+                        current_sequence = scaled_recent.copy()
+
+                        # Get actual price at prediction target
+                        actual_price = data.iloc[end_idx + horizon - 1]['Close']
+                        current_price = data.iloc[end_idx - 1]['Close']
+
+                        # Make prediction
+                        model = self.models.get(model_name, self.models['ensemble'])
+
+                        # Predict iteratively for the horizon
+                        for day in range(horizon):
+                            sequence_input = current_sequence[-self.lookback_days:].reshape(
+                                1, self.lookback_days, len(feature_columns)
+                            )
+
+                            pred_scaled = model.predict(sequence_input, verbose=0)[0][0]
+
+                            # Create next day features
+                            next_features = current_sequence[-1].copy()
+                            next_features[0] = pred_scaled  # Update close price
+
+                            # Simple feature updates for demonstration
+                            if len(current_sequence) > 1:
+                                price_change = pred_scaled - current_sequence[-1][0]
+                                if len(feature_columns) > 2:  # Update returns if available
+                                    next_features[2] = price_change
+
+                            current_sequence = np.vstack([current_sequence[1:], next_features])
+
+                        # Convert final prediction to actual price
+                        dummy_features = np.zeros((1, len(feature_columns)))
+                        dummy_features[0, 0] = pred_scaled
+                        predicted_price = self.scaler.inverse_transform(dummy_features)[0, 0]
+
+                        # Apply conservative bounds
+                        min_price = current_price * 0.5
+                        max_price = current_price * 2.0
+                        predicted_price = max(min_price, min(max_price, abs(predicted_price)))
+
+                        predictions.append(predicted_price)
+                        actuals.append(actual_price)
+
+                    except Exception as e:
+                        continue
+
+                if len(predictions) > 0:
+                    # Calculate metrics
+                    mae = mean_absolute_error(actuals, predictions)
+                    mape = mean_absolute_percentage_error(actuals, predictions)
+
+                    # Direction accuracy (up/down prediction)
+                    direction_correct = 0
+                    for i in range(len(predictions)):
+                        if i == 0:
+                            continue
+                        actual_direction = 1 if actuals[i] > actuals[i-1] else 0
+                        pred_direction = 1 if predictions[i] > actuals[i-1] else 0
+                        if actual_direction == pred_direction:
+                            direction_correct += 1
+
+                    direction_accuracy = direction_correct / max(1, len(predictions) - 1)
+
+                    # Price accuracy (within X% of actual)
+                    within_5_percent = sum(1 for i in range(len(predictions))
+                                         if abs(predictions[i] - actuals[i]) / actuals[i] <= 0.05)
+                    within_10_percent = sum(1 for i in range(len(predictions))
+                                          if abs(predictions[i] - actuals[i]) / actuals[i] <= 0.10)
+
+                    accuracy_5 = within_5_percent / len(predictions)
+                    accuracy_10 = within_10_percent / len(predictions)
+
+                    results[model_name][f'{horizon}d'] = {
+                        'mae': mae,
+                        'mape': mape * 100,  # Convert to percentage
+                        'direction_accuracy': direction_accuracy * 100,
+                        'within_5_percent': accuracy_5 * 100,
+                        'within_10_percent': accuracy_10 * 100,
+                        'samples': len(predictions)
+                    }
+                else:
+                    results[model_name][f'{horizon}d'] = {
+                        'mae': float('inf'),
+                        'mape': float('inf'),
+                        'direction_accuracy': 0,
+                        'within_5_percent': 0,
+                        'within_10_percent': 0,
+                        'samples': 0
+                    }
+
+        return results
+
+    def generate_accuracy_report(self, evaluation_results):
+        """
+        Generate a comprehensive accuracy report from evaluation results.
+
+        Args:
+            evaluation_results (dict): Results from evaluate_models_historical()
+        """
+        print("\n" + "="*80)
+        print("🎯 BITCAST MODEL ACCURACY REPORT")
+        print("="*80)
+
+        if not evaluation_results:
+            print("❌ No evaluation results available. Run evaluation first.")
+            return
+
+        model_names = ['ensemble', 'lstm', 'gru', 'transformer']
+        horizons = []
+
+        # Get all available horizons
+        for model_name in model_names:
+            if model_name in evaluation_results:
+                horizons.extend(evaluation_results[model_name].keys())
+        horizons = sorted(list(set(horizons)))
+
+        if not horizons:
+            print("❌ No horizon data available.")
+            return
+
+        # Overall model ranking
+        print("\n📊 OVERALL MODEL RANKING (by Direction Accuracy)")
+        print("-" * 60)
+
+        model_scores = {}
+        for model_name in model_names:
+            if model_name in evaluation_results:
+                total_direction_acc = 0
+                valid_horizons = 0
+                for horizon in horizons:
+                    if horizon in evaluation_results[model_name]:
+                        direction_acc = evaluation_results[model_name][horizon]['direction_accuracy']
+                        if direction_acc > 0:
+                            total_direction_acc += direction_acc
+                            valid_horizons += 1
+
+                avg_direction_acc = total_direction_acc / max(1, valid_horizons)
+                model_scores[model_name] = avg_direction_acc
+
+        # Sort models by performance
+        sorted_models = sorted(model_scores.items(), key=lambda x: x[1], reverse=True)
+
+        for rank, (model_name, score) in enumerate(sorted_models, 1):
+            icon = "🥇" if rank == 1 else "🥈" if rank == 2 else "🥉" if rank == 3 else "📈"
+            print(f"   {icon} {rank}. {model_name.upper():12}: {score:.1f}% direction accuracy")
+
+        # Detailed metrics by horizon
+        print(f"\n📋 DETAILED ACCURACY METRICS")
+        print("-" * 80)
+
+        for horizon in horizons:
+            print(f"\n⏰ {horizon.upper()} PREDICTIONS:")
+            print("   " + "-" * 70)
+
+            header = f"{'Model':<12} {'Direction':<12} {'Within 5%':<12} {'Within 10%':<12} {'MAPE':<10}"
+            print(f"   {header}")
+            print("   " + "-" * 70)
+
+            for model_name in model_names:
+                if (model_name in evaluation_results and
+                    horizon in evaluation_results[model_name]):
+
+                    metrics = evaluation_results[model_name][horizon]
+
+                    direction = f"{metrics['direction_accuracy']:.1f}%"
+                    within_5 = f"{metrics['within_5_percent']:.1f}%"
+                    within_10 = f"{metrics['within_10_percent']:.1f}%"
+                    mape = f"{metrics['mape']:.1f}%" if metrics['mape'] != float('inf') else "N/A"
+
+                    # Color coding for performance
+                    if metrics['direction_accuracy'] >= 60:
+                        icon = "🟢"
+                    elif metrics['direction_accuracy'] >= 50:
+                        icon = "🔵"
+                    elif metrics['direction_accuracy'] >= 40:
+                        icon = "🟡"
+                    else:
+                        icon = "🔴"
+
+                    row = f"{model_name:<12} {direction:<12} {within_5:<12} {within_10:<12} {mape:<10}"
+                    print(f"   {icon} {row}")
+
+        # Best model recommendations
+        print(f"\n💡 RECOMMENDATIONS")
+        print("-" * 40)
+
+        if sorted_models:
+            best_model = sorted_models[0][0]
+            best_score = sorted_models[0][1]
+
+            if best_score >= 60:
+                confidence = "High"
+                emoji = "🟢"
+            elif best_score >= 50:
+                confidence = "Medium"
+                emoji = "🔵"
+            else:
+                confidence = "Low"
+                emoji = "🟡"
+
+            print(f"   {emoji} Best Model: {best_model.upper()}")
+            print(f"   📈 Overall Accuracy: {best_score:.1f}%")
+            print(f"   🎯 Confidence Level: {confidence}")
+
+            if best_score < 50:
+                print(f"   ⚠️  Note: All models show low accuracy (<50%). Consider:")
+                print(f"      • Retraining with more recent data")
+                print(f"      • Adding more features or market indicators")
+                print(f"      • Using shorter prediction horizons")
+
+        print(f"\n📝 INTERPRETATION GUIDE:")
+        print(f"   • Direction Accuracy: % of correct up/down predictions")
+        print(f"   • Within X%: % of predictions within X% of actual price")
+        print(f"   • MAPE: Mean Absolute Percentage Error (lower is better)")
+        print(f"   • 🟢 Good (≥60%), 🔵 Fair (50-60%), 🟡 Poor (40-50%), 🔴 Very Poor (<40%)")
+
+        print("\n" + "="*80)
 
     def predict_multiple_horizons(self):
         """Predict for multiple time horizons with ensemble voting."""
