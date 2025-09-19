@@ -9,7 +9,7 @@ import numpy as np
 import yfinance as yf
 from datetime import datetime, timedelta
 from sklearn.preprocessing import RobustScaler
-from sklearn.metrics import mean_absolute_error, mean_squared_error
+from sklearn.metrics import mean_absolute_error
 import tensorflow as tf
 from tensorflow.keras.models import Sequential, Model, load_model
 from tensorflow.keras.layers import (LSTM, GRU, Dense, Dropout, Input,
@@ -67,15 +67,15 @@ class AdvancedBitcoinPredictor:
             btc_data['SPY_Close'] = spy_data['Close'].reindex(btc_data.index).fillna(method='ffill')
             btc_data['Gold_Close'] = gold_data['Close'].reindex(btc_data.index).fillna(method='ffill')
 
-        except Exception as e:
-            print(f"Warning: Could not download market data: {e}")
+        except Exception as market_data_error:
+            print(f"Warning: Could not download market data: {market_data_error}")
 
         # Flatten MultiIndex columns if present
         if isinstance(btc_data.columns, pd.MultiIndex):
             btc_data.columns = [col[0] for col in btc_data.columns]
 
         if btc_data.empty:
-            raise Exception("Failed to download Bitcoin data")
+            raise ValueError("Failed to download Bitcoin data")
 
         # Add advanced technical indicators
         btc_data = self._add_advanced_indicators(btc_data)
@@ -111,12 +111,12 @@ class AdvancedBitcoinPredictor:
         df['MACD_histogram'] = df['MACD'] - df['MACD_signal']
 
         # RSI with multiple periods
-        for period in [14, 30]:
+        for rsi_period in [14, 30]:
             delta = df['Close'].diff()
-            gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+            gain = (delta.where(delta > 0, 0)).rolling(window=rsi_period).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=rsi_period).mean()
             rs = gain / loss
-            df[f'RSI_{period}'] = 100 - (100 / (1 + rs))
+            df[f'RSI_{rsi_period}'] = 100 - (100 / (1 + rs))
 
         # Bollinger Bands with multiple periods
         for window in [20, 50]:
@@ -133,8 +133,8 @@ class AdvancedBitcoinPredictor:
         df['Volume_price_trend'] = df['Volume'] * df['Returns']
 
         # Price momentum
-        for period in [5, 10, 20]:
-            df[f'Momentum_{period}'] = df['Close'] / df['Close'].shift(period) - 1
+        for mom_period in [5, 10, 20]:
+            df[f'Momentum_{mom_period}'] = df['Close'] / df['Close'].shift(mom_period) - 1
 
         # Volatility measures
         df['Volatility_10'] = df['Returns'].rolling(window=10).std()
@@ -388,7 +388,7 @@ class AdvancedBitcoinPredictor:
     def load_models(self):
         """Load trained models."""
         if not os.path.exists('models/ensemble_model.keras'):
-            raise Exception("No trained models found. Please run with --retrain flag.")
+            raise FileNotFoundError("No trained models found. Please run with --retrain flag.")
 
         self.models['ensemble'] = load_model('models/ensemble_model.keras')
         self.scaler = joblib.load('models/advanced_scaler.joblib')
@@ -451,7 +451,7 @@ class AdvancedBitcoinPredictor:
 
         # Predict iteratively
         current_sequence = scaled_recent.copy()
-        predictions = []
+        pred_list = []
 
         model_key = 'ensemble' if use_ensemble else 'lstm'
         model = self.models.get(model_key, self.models['ensemble'])
@@ -462,7 +462,7 @@ class AdvancedBitcoinPredictor:
 
             # Get prediction
             pred_scaled = model.predict(X_pred, verbose=0)[0][0]
-            predictions.append(pred_scaled)
+            pred_list.append(pred_scaled)
 
             # Update sequence for next prediction
             next_features = current_sequence[-1].copy()
@@ -480,7 +480,7 @@ class AdvancedBitcoinPredictor:
             current_sequence[-1] = next_features
 
         # Convert back to original price scale using a more stable approach
-        final_pred_scaled = predictions[-1]
+        final_pred_scaled = pred_list[-1]
         current_scaled = scaled_recent[-1, 0]
 
         # Get recent actual prices for scaling reference
@@ -528,24 +528,24 @@ class AdvancedBitcoinPredictor:
             'Next Year': 365
         }
 
-        predictions = {}
+        horizon_predictions = {}
 
         # Get ensemble predictions
-        for period, days in horizons.items():
+        for time_period, days in horizons.items():
             ensemble_pred = self.predict_price(days, use_ensemble=True)
-            predictions[period] = ensemble_pred
+            horizon_predictions[time_period] = ensemble_pred
 
-        return predictions
+        return horizon_predictions
 
 if __name__ == "__main__":
     predictor = AdvancedBitcoinPredictor()
     predictor.download_data()
     predictor.train_models()
-    predictions = predictor.predict_multiple_horizons()
+    horizon_predictions = predictor.predict_multiple_horizons()
 
     current_price = predictor.get_current_price()
     print(f"\nCurrent Bitcoin Price: ${current_price:,.2f}")
 
-    for period, price in predictions.items():
+    for time_period, price in horizon_predictions.items():
         change = ((price - current_price) / current_price) * 100
-        print(f"{period}: ${price:,.2f} ({change:+.1f}%)")
+        print(f"{time_period}: ${price:,.2f} ({change:+.1f}%)")

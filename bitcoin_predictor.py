@@ -9,8 +9,7 @@ import numpy as np
 import yfinance as yf
 from datetime import datetime, timedelta
 from sklearn.preprocessing import MinMaxScaler
-from sklearn.metrics import mean_absolute_error, mean_squared_error
-import tensorflow as tf
+from sklearn.metrics import mean_absolute_error
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.layers import LSTM, Dense, Dropout
 from tensorflow.keras.callbacks import EarlyStopping
@@ -49,7 +48,7 @@ class BitcoinPredictor:
                               auto_adjust=False)
 
         if btc_data.empty:
-            raise Exception("Failed to download Bitcoin data")
+            raise ValueError("Failed to download Bitcoin data")
 
         # Flatten MultiIndex columns if present
         if isinstance(btc_data.columns, pd.MultiIndex):
@@ -192,7 +191,7 @@ class BitcoinPredictor:
     def load_model(self):
         """Load trained model and scaler."""
         if not os.path.exists('models/bitcoin_model.keras'):
-            raise Exception("No trained model found. Please run with --retrain flag.")
+            raise FileNotFoundError("No trained model found. Please run with --retrain flag.")
 
         self.model = load_model('models/bitcoin_model.keras')
         self.scaler = joblib.load('models/scaler.joblib')
@@ -225,7 +224,7 @@ class BitcoinPredictor:
         # Reshape for model input
         X_pred = scaled_recent.reshape(1, self.lookback_days, len(available_columns))
 
-        predictions = {}
+        pred_results = {}
         current_sequence = X_pred.copy()
 
         # Predict for different time horizons
@@ -236,7 +235,7 @@ class BitcoinPredictor:
             'Next Year': 365
         }
 
-        for period, days in time_horizons.items():
+        for time_period, days in time_horizons.items():
             sequence = current_sequence.copy()
 
             # For longer predictions, we simulate day by day
@@ -256,17 +255,17 @@ class BitcoinPredictor:
             dummy_features[0, 0] = pred_scaled
             predicted_price = self.scaler.inverse_transform(dummy_features)[0, 0]
 
-            predictions[period] = max(predicted_price, 0)  # Ensure positive price
+            pred_results[time_period] = max(predicted_price, 0)  # Ensure positive price
 
-        return predictions
+        return pred_results
 
 if __name__ == "__main__":
     # Test the predictor
     predictor = BitcoinPredictor()
     predictor.download_data()
     predictor.train_model()
-    predictions = predictor.predict()
+    pred_results = predictor.predict()
 
     print("Bitcoin Price Predictions:")
-    for period, price in predictions.items():
-        print(f"{period}: ${price:,.2f}")
+    for time_period, price in pred_results.items():
+        print(f"{time_period}: ${price:,.2f}")

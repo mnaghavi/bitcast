@@ -7,7 +7,7 @@ Simple LSTM-based Bitcoin price prediction (legacy version).
 import argparse
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -51,8 +51,8 @@ def main():
         print("\n⚠️  Disclaimer: This is for educational purposes only.")
         print("   Never invest based solely on predictions!")
 
-    except Exception as e:
-        print(f"❌ Error: {e}")
+    except Exception as prediction_error:
+        print(f"❌ Error: {prediction_error}")
         sys.exit(1)
 
 if __name__ == "__main__":

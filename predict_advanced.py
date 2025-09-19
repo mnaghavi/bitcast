@@ -7,7 +7,7 @@ Advanced prediction script with ensemble models and user-selectable periods.
 import argparse
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -190,15 +190,15 @@ Examples:
         print("   Never invest based solely on predictions!")
         print("   Always do your own research and consult financial advisors.")
 
-        print(f"\n💡 Tip: Use '--all-horizons' for complete analysis")
-        print(f"   or '--period <timeframe>' for specific predictions")
+        print("\n💡 Tip: Use '--all-horizons' for complete analysis")
+        print("   or '--period <timeframe>' for specific predictions")
 
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        print(f"\n🔧 Troubleshooting:")
-        print(f"   • Try: python predict_advanced.py --update-data --retrain")
-        print(f"   • Check internet connection for data download")
-        print(f"   • Ensure sufficient disk space for model training")
+    except Exception as prediction_error:
+        print(f"❌ Error: {prediction_error}")
+        print("\n🔧 Troubleshooting:")
+        print("   • Try: python predict_advanced.py --update-data --retrain")
+        print("   • Check internet connection for data download")
+        print("   • Ensure sufficient disk space for model training")
         sys.exit(1)
 
 if __name__ == "__main__":

@@ -1,0 +1,180 @@
+[MASTER]
+# Add files or directories to the blacklist. They should be base names, not paths.
+ignore=venv,data,models,__pycache__,.git
+
+# Use multiple processes to speed up Pylint.
+jobs=1
+
+# Pickle collected data for later comparisons.
+persistent=yes
+
+# Minimum Python version to use for version dependent checks.
+py-version=3.8
+
+[MESSAGES CONTROL]
+# Disable specific warnings that are common in ML projects
+disable=
+    import-error,           # E0401 - Libraries might not be installed in CI
+    unused-import,          # W0611 - Some imports used conditionally
+    too-many-arguments,     # R0913 - ML functions often have many params
+    too-many-locals,        # R0914 - Complex ML functions
+    too-many-instance-attributes, # R0902 - ML classes need many attributes
+    too-few-public-methods, # R0903 - Utility classes are fine
+    invalid-name,           # C0103 - ML uses short variable names (X, y, etc)
+    missing-module-docstring, # C0114 - Not all modules need docstrings
+    missing-class-docstring,  # C0115 - Not all classes need docstrings
+    missing-function-docstring, # C0116 - Not all functions need docstrings
+    line-too-long,          # C0301 - Some ML lines are necessarily long
+    broad-exception-caught, # W0718 - Sometimes we need broad exceptions
+    unused-variable,        # W0613 - Callback functions often have unused params
+    global-statement,       # W0603 - Sometimes needed for configuration
+    redefined-outer-name,   # W0621 - Common in nested functions
+
+# Enable specific checks that are important
+enable=
+    unused-import,
+    reimported,
+    import-self,
+    undefined-variable,
+    used-before-assignment,
+    dangerous-default-value
+
+[REPORTS]
+# Set the output format.
+output-format=text
+
+# Include message's id in output
+include-ids=yes
+
+# Template used to display messages.
+msg-template={path}:{line}:{column}: {msg_id}: {msg} ({symbol})
+
+[REFACTORING]
+# Maximum number of nested blocks for function / method body
+max-nested-blocks=5
+
+[BASIC]
+# Good variable names which should always be accepted
+good-names=i,j,k,ex,Run,_,X,y,df,ax,fig
+
+# Bad variable names which should always be refused
+bad-names=foo,bar,baz,toto,tutu,tata
+
+# Regular expression matching correct function names
+function-rgx=[a-z_][a-z0-9_]{2,30}$
+
+# Regular expression matching correct variable names
+variable-rgx=[a-z_][a-z0-9_]{2,30}$
+
+# Regular expression matching correct constant names
+const-rgx=(([A-Z_][A-Z0-9_]*)|(__.*__))$
+
+# Regular expression matching correct attribute names
+attr-rgx=[a-z_][a-z0-9_]{2,30}$
+
+# Regular expression matching correct argument names
+argument-rgx=[a-z_][a-z0-9_]{2,30}$
+
+# Regular expression matching correct class attribute names
+class-attribute-rgx=([A-Za-z_][A-Za-z0-9_]{2,30}|(__.*__))$
+
+# Regular expression matching correct method names
+method-rgx=[a-z_][a-z0-9_]{2,30}$
+
+# Regular expression matching correct module names
+module-rgx=(([a-z_][a-z0-9_]*)|([A-Z][a-zA-Z0-9]+))$
+
+[FORMAT]
+# Maximum number of characters on a single line.
+max-line-length=100
+
+# Maximum number of lines in a module
+max-module-lines=1000
+
+# String used as indentation unit.
+indent-string='    '
+
+[SIMILARITIES]
+# Minimum lines number of a similarity.
+min-similarity-lines=4
+
+# Ignore comments when computing similarities.
+ignore-comments=yes
+
+# Ignore docstrings when computing similarities.
+ignore-docstrings=yes
+
+# Ignore imports when computing similarities.
+ignore-imports=no
+
+[TYPECHECK]
+# List of module names for which member attributes should not be checked
+ignored-modules=numpy,pandas,sklearn,tensorflow,matplotlib,yfinance
+
+# List of class names for which member attributes should not be checked
+ignored-classes=numpy,pandas,sklearn,tensorflow
+
+[VARIABLES]
+# Tells whether we should check for unused import in __init__ files.
+init-import=no
+
+# A regular expression matching the name of dummy variables
+dummy-variables-rgx=_+$|(_[a-zA-Z0-9_]*[a-zA-Z0-9]+?$)|dummy|^ignored_|^unused_
+
+[CLASSES]
+# List of method names used to declare (i.e. assign) instance attributes.
+defining-attr-methods=__init__,__new__,setUp
+
+# List of valid names for the first argument in a class method.
+valid-classmethod-first-arg=cls
+
+# List of valid names for the first argument in a metaclass class method.
+valid-metaclass-classmethod-first-arg=mcs
+
+[DESIGN]
+# Maximum number of arguments for function / method
+max-args=10
+
+# Argument names that match this expression will be ignored.
+ignored-argument-names=_.*|^ignored_|^unused_
+
+# Maximum number of locals for function / method body
+max-locals=20
+
+# Maximum number of return / yield for function / method body
+max-returns=6
+
+# Maximum number of branch for function / method body
+max-branches=12
+
+# Maximum number of statements in function / method body
+max-statements=50
+
+# Maximum number of parents for a class
+max-parents=7
+
+# Maximum number of attributes for a class
+max-attributes=15
+
+# Minimum number of public methods for a class
+min-public-methods=1
+
+# Maximum number of public methods for a class
+max-public-methods=20
+
+[IMPORTS]
+# Deprecated modules which should not be used, separated by a comma
+deprecated-modules=regsub,TERMIOS,Bastion,rexec
+
+# Create a graph of every (i.e. internal and external) dependencies in the given file
+import-graph=
+
+# Create a graph of external dependencies in the given file
+ext-import-graph=
+
+# Create a graph of internal dependencies in the given file
+int-import-graph=
+
+[EXCEPTIONS]
+# Exceptions that will emit a warning when being caught.
+overgeneral-exceptions=Exception
