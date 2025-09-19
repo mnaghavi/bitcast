@@ -518,6 +518,25 @@ class AdvancedBitcoinPredictor:
 
         return float(predicted_price)
 
+    def predict_multiple_days(self, days_list, use_ensemble=True):
+        """
+        Predict Bitcoin prices for multiple specific days.
+
+        Args:
+            days_list (list): List of days ahead to predict
+            use_ensemble (bool): Whether to use ensemble model
+
+        Returns:
+            dict: Dictionary mapping days to predicted prices
+        """
+        predictions = {}
+
+        for days in days_list:
+            predicted_price = self.predict_price(days, use_ensemble)
+            predictions[days] = predicted_price
+
+        return predictions
+
     def predict_multiple_horizons(self):
         """Predict for multiple time horizons with ensemble voting."""
         horizons = {
